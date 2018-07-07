@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Colombia Dev : Survey 2018</title>
+    <style>
+      a.button {
+        text-decoration: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <p><a href="/anonymous" class="button">take survey anonymously</a></p>
+    {{if .Logged}}
+       <p><a href="/github" class="button">  take survey as: {{.Username}}</a></p>
+       <p><form action="/logout" method="post"><input type="submit" value="Logout"></form></p>
+    {{else}}
+       <p><a href="/login" class="button">Take survey as via github</a></p>
+    {{end}}
+    
+  </body>
+</html>
