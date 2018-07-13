@@ -1,0 +1,11 @@
+{
+    "env": {
+        "ADDRESS": "0.0.0.0:8500",
+	"GOOGLE_FORM_URL": "https://docs.google.com/forms/d/e/1FAIpQLSeWlqrFB2t97m86_MrzQ1GUhL-HU-d4jSZwVyA2N9_PAbRMhQ/viewform?usp=pp_url&entry.1953427927=%s",
+	"CALLBACK_URL": "https://colombia-dev-survey.now.sh/OauthCallback", 
+        "SESSION_SECRET": "@survey_session_secret",
+        "JWT_SECRET": "@survey_jwt_secret",
+        "GITHUB_CLIENT_ID": "@survey_github_client_id",
+        "GITHUB_CLIENT_SECRET": "@survey_github_client_secret"
+  }
+}
