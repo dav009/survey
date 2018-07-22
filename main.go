@@ -1,8 +1,13 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -24,6 +29,8 @@ type Config struct {
 	GoogleFormUrl      string
 	CallbackUrl        string
 	Address            string
+	HashSecret         string
+	AssetsDirectory    string
 }
 
 var config = Config{
@@ -34,6 +41,8 @@ var config = Config{
 	Address:            os.Getenv("ADDRESS"),
 	CallbackUrl:        os.Getenv("CALLBACK_URL"),
 	GoogleFormUrl:      os.Getenv("GOOGLE_FORM_URL"),
+	HashSecret:         os.Getenv("HASH_SECRET"),
+	AssetsDirectory:    "assets",
 }
 
 const (
@@ -45,7 +54,11 @@ const (
 var sessionStore = sessions.NewCookieStore([]byte(config.SessionSecret), nil)
 
 func New() *http.ServeMux {
+
+	fs := http.FileServer(http.Dir(config.AssetsDirectory))
+
 	mux := http.NewServeMux()
+	mux.Handle("/assets/", http.StripPrefix("/assets/", fs))
 	mux.HandleFunc("/", welcomeHandler())
 	mux.Handle("/github", requireLogin(http.HandlerFunc(githubSurveyHandler)))
 	mux.Handle("/anonymous", http.HandlerFunc(anonymousSurveyHandler))
@@ -56,7 +69,7 @@ func New() *http.ServeMux {
 		RedirectURL:  config.CallbackUrl,
 		Endpoint:     githubOAuth2.Endpoint,
 	}
-	stateConfig := gologin.DebugOnlyCookieConfig
+	stateConfig := gologin.DefaultCookieConfig
 	mux.Handle("/login", github.StateHandler(stateConfig, github.LoginHandler(oauth2Config, nil)))
 	mux.Handle("/OauthCallback", github.StateHandler(stateConfig, github.CallbackHandler(oauth2Config, issueSession(), nil)))
 	return mux
@@ -125,17 +138,28 @@ func anonymousSurveyHandler(w http.ResponseWriter, req *http.Request) {
 func githubSurveyHandler(w http.ResponseWriter, req *http.Request) {
 	s, err := sessionStore.Get(req, sessionName)
 	if err != nil {
+		log.Printf(err.Error())
 		http.Error(w, "could not get user session", http.StatusInternalServerError)
+		return
 	}
-	formJWT := generateJWT(hashUser(s.Values[sessionUserName].(string)))
+	hashedUser, err := hashUser(s.Values[sessionUserName].(string))
+	if err != nil {
+		log.Printf(err.Error())
+		http.Error(w, "error while hashing user", http.StatusInternalServerError)
+		return
+	}
+	formJWT, err := generateJWT(hashedUser)
+	if err != nil {
+		log.Printf(err.Error())
+		http.Error(w, "error while generating JWT token", http.StatusInternalServerError)
+		return
+	}
 	link := fmt.Sprintf(config.GoogleFormUrl, formJWT)
 	http.Redirect(w, req, link, http.StatusSeeOther)
 }
 
 func logoutHandler(w http.ResponseWriter, req *http.Request) {
-	if req.Method == "POST" {
-		sessionStore.Destroy(w, sessionName)
-	}
+	sessionStore.Destroy(w, sessionName)
 	http.Redirect(w, req, "/", http.StatusFound)
 }
 
@@ -166,22 +190,41 @@ func main() {
 	}
 }
 
-func generateJWT(hashedUsername string) string {
+func generateJWT(hashedUsername string) (string, error) {
 	t := jwt.New(jwt.SigningMethodHS256)
 	claims := make(jwt.MapClaims)
 	claims["exp"] = 0
 	claims["hashedUsername"] = hashedUsername
 	claims["at"] = time.Now().Unix()
 	t.Claims = claims
-	tokenString, err := t.SignedString([]byte(config.JwtSecret))
-	if err != nil {
-		fmt.Println(err)
-	}
-	return tokenString
+	return t.SignedString([]byte(config.JwtSecret))
 }
 
-func hashUser(username string) string {
+func hashUser(username string) (string, error) {
 	// add some real user hashing here
-	return fmt.Sprintf("hashed_username_%s", username)
+	encryptedUser, err := encrypt([]byte(username), []byte(config.HashSecret))
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(encryptedUser), nil
 
+}
+
+func encrypt(plaintext []byte, key []byte) ([]byte, error) {
+	c, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(c)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
