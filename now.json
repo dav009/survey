@@ -6,7 +6,6 @@
         "SESSION_SECRET": "@survey_session_secret",
         "JWT_SECRET": "@survey_jwt_secret",
         "GITHUB_CLIENT_ID": "@survey_github_client_id",
-        "GITHUB_CLIENT_SECRET": "@survey_github_client_secret",
-	"HASH_SECRET": "@survey_hash_secret"
+        "GITHUB_CLIENT_SECRET": "@survey_github_client_secret"
   }
 }

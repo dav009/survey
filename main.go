@@ -1,13 +1,9 @@
 package main
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"html/template"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +13,7 @@ import (
 	"github.com/dghubble/gologin/github"
 	"github.com/dghubble/sessions"
 	jwt "github.com/dgrijalva/jwt-go"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
 	githubOAuth2 "golang.org/x/oauth2/github"
 )
@@ -29,7 +26,6 @@ type Config struct {
 	GoogleFormUrl      string
 	CallbackUrl        string
 	Address            string
-	HashSecret         string
 	AssetsDirectory    string
 }
 
@@ -41,7 +37,6 @@ var config = Config{
 	Address:            os.Getenv("ADDRESS"),
 	CallbackUrl:        os.Getenv("CALLBACK_URL"),
 	GoogleFormUrl:      os.Getenv("GOOGLE_FORM_URL"),
-	HashSecret:         os.Getenv("HASH_SECRET"),
 	AssetsDirectory:    "assets",
 }
 
@@ -142,7 +137,7 @@ func githubSurveyHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "could not get user session", http.StatusInternalServerError)
 		return
 	}
-	hashedUser, err := hashUser(s.Values[sessionUserName].(string))
+	hashedUser, err := hashUser(s.Values[sessionUserKey].(string))
 	if err != nil {
 		log.Printf(err.Error())
 		http.Error(w, "error while hashing user", http.StatusInternalServerError)
@@ -201,8 +196,7 @@ func generateJWT(hashedUsername string) (string, error) {
 }
 
 func hashUser(username string) (string, error) {
-	// add some real user hashing here
-	encryptedUser, err := encrypt([]byte(username), []byte(config.HashSecret))
+	encryptedUser, err := treatAtPassword(username)
 	if err != nil {
 		return "", err
 	}
@@ -210,21 +204,6 @@ func hashUser(username string) (string, error) {
 
 }
 
-func encrypt(plaintext []byte, key []byte) ([]byte, error) {
-	c, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-
-	gcm, err := cipher.NewGCM(c)
-	if err != nil {
-		return nil, err
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, err
-	}
-
-	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+func treatAtPassword(s string) ([]byte, error) {
+	return bcrypt.GenerateFromPassword([]byte(s), bcrypt.DefaultCost)
 }
